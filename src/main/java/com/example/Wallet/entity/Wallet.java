@@ -33,23 +33,6 @@ public class Wallet {
 	        this.phone = phone;
 	        this.balance = balance;
 	    }
-
-	    public Integer getPhone() {
-	        return phone;
-	    }
-
-	    public void setPhone(Integer phone) {
-	        this.phone = phone;
-	    }
-
-	    public Integer getBalance() {
-	        return balance;
-	    }
-
-	    public void setBalance(Integer balance) {
-	        this.balance = balance;
-	    }
-
 	    public void changeBalance(Integer amount) {
 	        this.balance += amount;
 	    }
