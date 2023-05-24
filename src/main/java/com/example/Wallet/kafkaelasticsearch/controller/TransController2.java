@@ -20,137 +20,108 @@ import com.example.Wallet.kafkaelasticsearch.repository.elasticrepo;
 import com.example.Wallet.service.TransService;
 import com.example.Wallet.service.WalletService;
 
+import javax.websocket.SendResult;
 import java.util.ArrayList;
 import java.util.List;
 
 @RestController
 public class TransController2 {
-    @Autowired                         //dependency injection
-    TransService transService;
-    @Autowired                         //dependency injection
-    WalletService walletService;
-    @Autowired
-    private elasticrepo elasticRepository;
+
+    private static final String KAFKA_TOPIC = "txnById";
 
     @Autowired
-    private KafkaTemplate kafkaTemplate;
-    String kafkaTopic = "txnById";
-    //to display all transactions
-//    @GetMapping(value = "/transaction/all")
-//    public List<TransModel> displayAll() {
-//        return transService.displayall();
-//    }
+    private TransService transactionService;
 
+    @Autowired
+    private WalletService walletService;
 
-    //for checking status of transaction
-    @GetMapping(value = "/transaction2/{transactionid}")
-    public String displayTransaction(@PathVariable("transactionid") Integer transactionid) {
-        List<TransModel> checkTransaction = transService.findByTransactionid(transactionid);
-        if (checkTransaction.isEmpty())
-            return "Transaction Status: failed";
-        else return "Transaction Status: Successful";
+    @Autowired
+    private elasticrepo elasticTransactionRepository;
+
+    @Autowired
+    private KafkaTemplate<String, ElasticTransaction> kafkaTemplate;
+
+    @Autowired
+    private KafkaTemplate<String, User> kafkaTemplate2;
+
+    // Get transaction status by ID
+    @GetMapping("/transactions/{transactionId}")
+    public String getTransactionStatus(@PathVariable("transactionId") Integer transactionId) {
+        List<TransModel> transactions = transactionService.findByTransactionid(transactionId);
+        if (transactions.isEmpty())
+            return "Transaction Status: Failed";
+        else
+            return "Transaction Status: Successful";
     }
 
-    //to display transaction using pagination
-    @GetMapping(value = "/transaction2/all")
+    // Get all transactions with pagination
+    @GetMapping("/transactions")
     public ResponseEntity<List<TransModel>> getAllTransactions(
             @RequestParam(defaultValue = "0") Integer pageNo,
             @RequestParam(defaultValue = "1") Integer pageSize) {
-        List<TransModel> list = transService.getAllTransactions(pageNo, pageSize);
-
-        return new ResponseEntity<List<TransModel>>(list, new HttpHeaders(), HttpStatus.OK);
+        List<TransModel> transactions = transactionService.getAllTransactions(pageNo, pageSize);
+        return new ResponseEntity<>(transactions, new HttpHeaders(), HttpStatus.OK);
     }
 
-
-    //for checking transaction of particular phone number
-    @GetMapping(value = "/transaction2/phone/{payerphone}")
-    public List<TransModel> displayTransactions(@PathVariable("payerphone") Integer phoneNo) {
-//            return transService.displayTransaction(transactionid);
-        List<TransModel> payer_phone = transService.findbyPayerPhone(phoneNo);
-        List<TransModel> payee_phone = transService.findbyPayeePhone(phoneNo);
-        List<TransModel> newList = new ArrayList<TransModel>();
-        newList.addAll(payee_phone);
-        newList.addAll(payer_phone);
-
-        return newList;
+    // Get transactions by phone number
+    @GetMapping("/transactions/phone/{phoneNumber}")
+    public List<TransModel> getTransactionsByPhone(@PathVariable("phoneNumber") Integer phoneNumber) {
+        List<TransModel> payerTransactions = transactionService.findbyPayerPhone(phoneNumber);
+        List<TransModel> payeeTransactions = transactionService.findbyPayeePhone(phoneNumber);
+        List<TransModel> allTransactions = new ArrayList<>();
+        allTransactions.addAll(payeeTransactions);
+        allTransactions.addAll(payerTransactions);
+        return allTransactions;
     }
 
-    //API to transfer money from one wallet to another wallet
-    @PostMapping(value = "/transaction2")           // post mapping
-    public String addtransaction(@RequestBody TransModel transModel) {
-//        transService.addtransaction(transModel);
-//        return "transaction successful";
-        List<Wallet> payer_phone = walletService.findbyPhone(transModel.getPayerphone());
-        List<Wallet> payee_phone = walletService.findbyPhone(transModel.getPayeephone());
-        if (!payee_phone.isEmpty()) {
-            if (!payer_phone.isEmpty()) {
-                if (payee_phone.get(0).getBalance() >= transModel.getAmount()) {
-                    transService.addtransaction(transModel);
-                    payee_phone.get(0).changeBalance(-transModel.getAmount());
-                    payer_phone.get(0).changeBalance(transModel.getAmount());
-                    return "transaction successful";
-                } else return "Insufficient balance";
-            } else return "phone number doesn't exist";
-        } else return "phone number doesn't exist";
+    // Transfer money from one wallet to another wallet
+    @PostMapping("/elastic/transactions")
+    public String createTransaction(@RequestBody TransModel transaction) {
+        List<Wallet> payerWallets = walletService.findbyPhone(transaction.getPayerphone());
+        List<Wallet> payeeWallets = walletService.findbyPhone(transaction.getPayeephone());
+
+        if (!payerWallets.isEmpty() && !payeeWallets.isEmpty()) {
+            Wallet payerWallet = payerWallets.get(0);
+            Wallet payeeWallet = payeeWallets.get(0);
+            int payerBalance = payerWallet.getBalance();
+            int transactionAmount = transaction.getAmount();
+
+            if (payerBalance >= transactionAmount) {
+                transactionService.addtransaction(transaction);
+                kafkaTemplate.send(KAFKA_TOPIC, new ElasticTransaction(transaction));
+
+                payerWallet.changeBalance(-transactionAmount);
+                payeeWallet.changeBalance(transactionAmount);
+
+                return "Transaction Successful";
+            } else {
+                return "Insufficient Balance";
+            }
+        } else {
+            return "Phone number(s) do not exist";
+        }
     }
 
-    @PostMapping("/elastictransaction")
-    public String createTxn(@RequestBody ElasticTransaction transaction) {
-        List<Wallet> payer_num=walletService.findbyPhone(transaction.getSenderphone());
-        List<Wallet> payee_num=walletService.findbyPhone(transaction.getReceiverphone());
-
-        int payer_balance=payer_num.get(0).getBalance();
-        int txnAmount=transaction.getAmount();
-
-        if(!payer_num.isEmpty())
-        {
-            if(!payee_num.isEmpty())
-            {
-                if(payer_balance>=txnAmount)
-                {
-//                  transService.addtransaction(transaction);
-                    kafkaTemplate.send(kafkaTopic, transaction);
-
-
-                    Wallet payer=payer_num.get(0);
-                    Wallet payee=payee_num.get(0);
-
-                    payer.changeBalance(-txnAmount);
-                    payee.changeBalance(txnAmount);
-
-
-
-                    return "Successfully sent";
-                }
-                else return "Insufficient balance";
-            } else return "payee doesn't exist";
-        } else return "payer doesn't exist";
-
+    @GetMapping("/elastictransactions/{phone}")
+    public List<ElasticTransaction> getElasticTransactions(@PathVariable Integer phone) {
+        List<ElasticTransaction> senderTransactions = elasticTransactionRepository.findBySenderphone(phone);
+        List<ElasticTransaction> receiverTransactions = elasticTransactionRepository.findByReceiverphone(phone);
+        List<ElasticTransaction> allTransactions = new ArrayList<>();
+        allTransactions.addAll(senderTransactions);
+        allTransactions.addAll(receiverTransactions);
+        return allTransactions;
     }
 
-    @GetMapping("/elastictransaction/{phone}")
-    public List<ElasticTransaction> getTransactions(@PathVariable Integer phone){
-        List<ElasticTransaction> sender=elasticRepository.findBySenderphone(phone);
-        List<ElasticTransaction> reciever=elasticRepository.findByReceiverphone(phone);
-
-        List<ElasticTransaction> newlist= new ArrayList<ElasticTransaction>();
-        newlist.addAll(sender);
-        newlist.addAll(reciever);
-        return newlist;
-    }
-    
-    
-    ///////////simle kaska and spring
+    // Publish message to Kafka
     @GetMapping("/publish/{name}")
-    public String post(@PathVariable("name") final String name) {
-
-        kafkaTemplate.send(kafkaTopic, new User(name, "Technology","yash@gmail" ,"X","Y",12000L));
-
+    public String publishToKafka(@PathVariable("name") final String name) {
+        kafkaTemplate2.send(KAFKA_TOPIC, new User(name, "Technology", "yash@gmail", "X", "Y", 12000L));
         return "Published successfully";
     }
-    
-    
-    
-    
+
+    @GetMapping(value = "/transaction/all")
+    public List<TransModel> displayAll() {
+        return transactionService.displayall();
+    }
 
 }
