@@ -1,5 +1,6 @@
 package com.example.Wallet.kafkaelasticsearch.controller;
 
+import com.example.Wallet.kafkaelasticsearch.model.ElasticTransaction;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -9,13 +10,16 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping(value = "/kafka/messages")
 public class KafkaMessagePublisherController {
     @Autowired
-    private KafkaTemplate<String, String> kafkaTemplate;
+    private KafkaTemplate<String, ElasticTransaction> kafkaTemplate;
     private static final String TOPIC = "Kafka_Example";
 
 
     @GetMapping("/publish/{message}")
     public String publishMessage(@PathVariable("message") final String message) {
-        kafkaTemplate.send(TOPIC, message);
+        ElasticTransaction messageTransaction=new ElasticTransaction();
+        messageTransaction.setTransactionid(message);
+
+        kafkaTemplate.send(TOPIC, messageTransaction);
         return "Published successfully";
     }
 
@@ -28,7 +32,10 @@ public class KafkaMessagePublisherController {
      */
     @PostMapping("/{topicName}")
     public String publishMessageInTopic(@PathVariable("topicName") String topicName, @RequestBody String message) {
-        kafkaTemplate.send(topicName, message);
+        ElasticTransaction messageTransaction=new ElasticTransaction();
+        messageTransaction.setTransactionid(message);
+
+        kafkaTemplate.send(TOPIC, messageTransaction);
         return "Message published successfully";
     }
 

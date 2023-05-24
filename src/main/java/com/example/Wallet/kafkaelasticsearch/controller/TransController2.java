@@ -41,8 +41,8 @@ public class TransController2 {
     @Autowired
     private KafkaTemplate<String, ElasticTransaction> kafkaTemplate;
 
-    @Autowired
-    private KafkaTemplate<String, User> kafkaTemplate2;
+//    @Autowired
+//    private KafkaTemplate<String, User> kafkaTemplate2;
 
     // Get transaction status by ID
     @GetMapping("/transactions/{transactionId}")
@@ -55,7 +55,7 @@ public class TransController2 {
     }
 
     // Get all transactions with pagination
-    @GetMapping("/transactions")
+    @GetMapping("/transactions2")
     public ResponseEntity<List<TransModel>> getAllTransactions(
             @RequestParam(defaultValue = "0") Integer pageNo,
             @RequestParam(defaultValue = "1") Integer pageSize) {
@@ -113,13 +113,13 @@ public class TransController2 {
     }
 
     // Publish message to Kafka
-    @GetMapping("/publish/{name}")
-    public String publishToKafka(@PathVariable("name") final String name) {
-        kafkaTemplate2.send(KAFKA_TOPIC, new User(name, "Technology", "yash@gmail", "X", "Y", 12000L));
-        return "Published successfully";
-    }
+//    @GetMapping("/publish/{name}")
+//    public String publishToKafka(@PathVariable("name") final String name) {
+//        kafkaTemplate2.send(KAFKA_TOPIC, new User(name, "Technology", "yash@gmail", "X", "Y", 12000L));
+//        return "Published successfully";
+//    }
 
-    @GetMapping(value = "/transaction/all")
+    @GetMapping(value = "/transaction/all2")
     public List<TransModel> displayAll() {
         return transactionService.displayall();
     }
